@@ -43,6 +43,14 @@ class LivenessDataset(torch.utils.data.Dataset):
         return len(self.images_fns)
 
     def __getitem__(self, idx):
+        """
+        return an image and label given an index.
+
+        NOTE: images are RGB float tensors from 0 to 1.
+        TODO: I hate that all these transformations are written here.
+        """
+
+
         # no ideia why I need this, when the idx would be a tensor!?
         if torch.is_tensor(idx):
             idx = idx.tolist()
@@ -53,12 +61,12 @@ class LivenessDataset(torch.utils.data.Dataset):
         # RuntimeError: stack expects each tensor to be equal size, but got [480, 640, 3] at entry 0 and [1280, 720, 3] at entry 4
         image = cv2.resize(image, self.img_dim)
         class_id = self.targets[idx]
+        class_id = torch.tensor([class_id])
 
-
-        img_tensor = torch.from_numpy(image)
+        img_tensor = torch.from_numpy(image/255.)
         img_tensor = img_tensor.permute(2, 0, 1)
 
-        return img_tensor, class_id
+        return img_tensor.float(), class_id.float()
 
 
 if __name__ == "__main__":
