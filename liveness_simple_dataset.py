@@ -37,6 +37,7 @@ class LivenessDataset(torch.utils.data.Dataset):
             self.images_fns.extend(class_images_fns)
             self.targets.extend([self.class_to_idx[c]]*len(class_images_fns))
 
+        self.targets = torch.LongTensor(self.targets)
         self.img_dim = (416, 416)
 
     def __len__(self):
@@ -61,12 +62,12 @@ class LivenessDataset(torch.utils.data.Dataset):
         # RuntimeError: stack expects each tensor to be equal size, but got [480, 640, 3] at entry 0 and [1280, 720, 3] at entry 4
         image = cv2.resize(image, self.img_dim)
         class_id = self.targets[idx]
-        class_id = torch.tensor([class_id])
+        # class_id = torch.tensor([class_id])
 
         img_tensor = torch.from_numpy(image/255.)
         img_tensor = img_tensor.permute(2, 0, 1)
 
-        return img_tensor.float(), class_id.float()
+        return img_tensor.float(), class_id
 
 
 if __name__ == "__main__":
