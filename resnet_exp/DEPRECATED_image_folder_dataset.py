@@ -11,7 +11,7 @@ import torch
 
 import torchvision.transforms as transforms
 
-class ImageFolderDataset(torch.utils.data.Dataset):
+class DEPRECATEDImageFolderDataset(torch.utils.data.Dataset):
     """Custom ImageFolder Dataset."""
 
     def __init__(self, root, transform, split = "train"):

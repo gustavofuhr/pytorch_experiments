@@ -5,8 +5,6 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 
-import image_folder_dataset
-
 CUSTOM_DATASETS = {
     "dogbreeds": "../data/dogbreeds_clean/"
 }
