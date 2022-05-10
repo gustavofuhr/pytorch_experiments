@@ -1,12 +1,29 @@
 import inspect
+from pyrsistent import CheckedValueTypeError
 
 import torch
 import torchvision
 import torchvision.transforms as transforms
 
+import image_folder_dataset
+
+CUSTOM_DATASETS = {
+    "dogbreeds": "../data/dogbreeds_clean/"
+}
+
+def _get_pytorch_dataloders(train_dataset, val_dataset, batch_size):
+    train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
+                                              batch_size=batch_size,
+                                              shuffle=True)
+
+    val_loader = torch.utils.data.DataLoader(dataset=val_dataset,
+                                              batch_size=batch_size,
+                                              shuffle=True)
+
+    return train_loader, val_loader
 
 
-def get_dataset_loaders(dataset_name, resize_size = None, batch_size = 32):
+def get_pytorch_dataset_loaders(dataset_name, resize_size, batch_size):
     dataset = getattr(torchvision.datasets, dataset_name)
     dataset_sig = inspect.signature(dataset)
 
@@ -36,12 +53,19 @@ def get_dataset_loaders(dataset_name, resize_size = None, batch_size = 32):
     else:
         raise Exception("Don't understand dataset method signature.")
 
-    train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
-                                              batch_size=batch_size,
-                                              shuffle=True)
 
-    val_loader = torch.utils.data.DataLoader(dataset=val_dataset,
-                                              batch_size=batch_size,
-                                              shuffle=True)
+    return _get_pytorch_dataloders(train_dataset, val_dataset)
 
-    return train_loader, val_loader
+def get_dataset_loaders(dataset_name, resize_size = None, batch_size = 32):
+
+    if dataset_name in dir(torchvision.datasets):
+        return get_pytorch_dataset_loaders(dataset_name, resize_size, batch_size)
+    elif dataset_name in CUSTOM_DATASETS.keys():
+        custom_train_dataset = image_folder_dataset.ImageFolderDataset(CUSTOM_DATASETS[dataset_name], split="train")
+        custom_val_dataset = image_folder_dataset.ImageFolderDataset(CUSTOM_DATASETS[dataset_name], split="val")
+        return _get_pytorch_dataloders(custom_train_dataset, custom_val_dataset, batch_size)
+
+
+if __name__ == "__main__":
+    get_dataset_loaders("dogbreeds")
+
