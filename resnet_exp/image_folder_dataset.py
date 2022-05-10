@@ -14,7 +14,7 @@ import torchvision.transforms as transforms
 class ImageFolderDataset(torch.utils.data.Dataset):
     """Custom ImageFolder Dataset."""
 
-    def __init__(self, root, split = "train"):
+    def __init__(self, root, transform, split = "train"):
         """
             root (string): Directory with all the images.
             transform (callable, optional): Optional transform to be applied
