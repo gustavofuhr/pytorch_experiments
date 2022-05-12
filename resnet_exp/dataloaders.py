@@ -12,17 +12,22 @@ from ffcv.fields.decoders import IntDecoder, RandomResizedCropRGBImageDecoder
 
 CUSTOM_DATASETS = {
     "dogbreeds": "../data/dogbreeds_clean/",
-    "ffcv_dogbreeds": "../data/ffcv/"
+    "ffcv_dogbreeds": "../data/ffcv/",
+    "unico130k_v2": "/home/gfuhr/data/unico130k_v2/ensemble/"
 }
 
-def _get_pytorch_dataloders(train_dataset, val_dataset, batch_size):
+def _get_pytorch_dataloders(train_dataset, val_dataset, batch_size, num_workers):
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
                                               batch_size=batch_size,
-                                              shuffle=True)
+                                              shuffle=True,
+                                              num_workers=num_workers,
+                                              pin_memory=True)
 
     val_loader = torch.utils.data.DataLoader(dataset=val_dataset,
                                               batch_size=batch_size,
-                                              shuffle=True)
+                                              shuffle=True,
+                                              num_workers=num_workers,
+                                              pin_memory=True)
 
     return train_loader, val_loader
 
@@ -43,7 +48,7 @@ def _get_pytorch_default_transform(resize_size):
     return def_transform
 
 
-def get_pytorch_dataset_loaders(dataset_name, resize_size, batch_size):
+def get_pytorch_dataset_loaders(dataset_name, resize_size, batch_size, num_workers):
     dataset = getattr(torchvision.datasets, dataset_name)
     dataset_sig = inspect.signature(dataset)
 
@@ -65,9 +70,9 @@ def get_pytorch_dataset_loaders(dataset_name, resize_size, batch_size):
         raise Exception("Don't understand dataset method signature.")
 
 
-    return _get_pytorch_dataloders(train_dataset, val_dataset, resize_size, batch_size)
+    return _get_pytorch_dataloders(train_dataset, val_dataset, batch_size, num_workers)
 
-def get_ffcv_dataloaders(root_dir, dataset_name, resize_size, batch_size):
+def get_ffcv_dataloaders(root_dir, dataset_name, resize_size, batch_size, num_workers):
     # Random resized crop
     decoder = RandomResizedCropRGBImageDecoder((resize_size, resize_size))
 
@@ -83,26 +88,24 @@ def get_ffcv_dataloaders(root_dir, dataset_name, resize_size, batch_size):
         'label': label_pipeline
     }
 
-    # TODO: what are those workers?
-    num_workers = 1
-
     train_loader = Loader(os.path.join(root_dir, f"{dataset_name}_train.beton"),
                                             batch_size=batch_size, num_workers=num_workers,
-                                            order=OrderOption.RANDOM, pipelines=pipelines)
+                                            order=OrderOption.RANDOM, pipelines=pipelines, os_cache=True)
 
     val_loader = Loader(os.path.join(root_dir, f"{dataset_name}_val.beton"),
                                             batch_size=batch_size, num_workers=num_workers,
-                                            order=OrderOption.RANDOM, pipelines=pipelines)
+                                            order=OrderOption.RANDOM, pipelines=pipelines, os_cache=True)
 
 
     return train_loader, val_loader
 
-def get_dataset_loaders(dataset_name, resize_size = None, batch_size = 32):
+def get_dataset_loaders(dataset_name, use_ffcv = False, resize_size = None, batch_size = 32, num_workers = 4):
 
     if dataset_name in dir(torchvision.datasets):
-        return get_pytorch_dataset_loaders(dataset_name, resize_size, batch_size)
-    elif dataset_name.startswith("ffcv"):
-        return get_ffcv_dataloaders(CUSTOM_DATASETS[dataset_name], dataset_name, resize_size, batch_size)
+        return get_pytorch_dataset_loaders(dataset_name, resize_size, batch_size, num_workers)
+    elif use_ffcv:
+        print("Using FFCV")
+        return get_ffcv_dataloaders(CUSTOM_DATASETS[dataset_name], dataset_name, resize_size, batch_size, num_workers)
     elif dataset_name in CUSTOM_DATASETS.keys():
         #custom_train_dataset = image_folder_dataset.ImageFolderDataset(CUSTOM_DATASETS[dataset_name], split="train")
         #custom_val_dataset = image_folder_dataset.ImageFolderDataset(CUSTOM_DATASETS[dataset_name], split="val")
@@ -112,7 +115,7 @@ def get_dataset_loaders(dataset_name, resize_size = None, batch_size = 32):
         custom_val_dataset = torchvision.datasets.ImageFolder(root=os.path.join(CUSTOM_DATASETS[dataset_name], "val"),
                                                                             transform=_get_pytorch_default_transform(resize_size))
 
-        return _get_pytorch_dataloders(custom_train_dataset, custom_val_dataset, batch_size)
+        return _get_pytorch_dataloders(custom_train_dataset, custom_val_dataset, batch_size, num_workers)
 
 
 if __name__ == "__main__":

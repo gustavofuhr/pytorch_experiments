@@ -10,7 +10,7 @@ def export_dataset_to_ffcv(dataset_name, root_folder, jpeg_quality=90, max_resol
     for s in splits:
         split_dataset = torchvision.datasets.ImageFolder(root=os.path.join(root_folder, s))
 
-        write_path = f"../data/ffcv/{dataset_name}_{s}.beton"
+        write_path = f"../data/ffcv/ffcv_{dataset_name}_{s}.beton"
 
         writer = DatasetWriter(write_path, {
             # Tune options to optimize dataset size, throughput at train-time

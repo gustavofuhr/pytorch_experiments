@@ -11,10 +11,22 @@ import torch.nn as nn
 import models
 import dataloaders
 
-def train_model(backbone_name, pretrained, freeze_all, train_loader, val_loader, n_epochs = 100, track_experiment = False, track_images = False):
+def train_model(backbone_name, 
+                    pretrained, 
+                    freeze_all, 
+                    train_loader, 
+                    val_loader,
+                    use_ffcv, 
+                    n_epochs = 100, 
+                    track_experiment = False, 
+                    track_images = False):
     """
     Train a model given model params and dataset loaders
     """
+    # import pdb; pdb.set_trace()
+
+    torch.backends.cudnn.benchmark = True
+
     model = models.get_model(backbone_name, pretrained)
     print("model {backbone_name}")
     print(model)
@@ -30,9 +42,11 @@ def train_model(backbone_name, pretrained, freeze_all, train_loader, val_loader,
 
     # TODO, why it works when the last layer is not resized!?
     no_features_fc = model.fc.in_features
-    #TODO: debug
-    model.fc = nn.Linear(no_features_fc, 100)
-    # model.fc = nn.Linear(no_features_fc, len(train_loader.dataset.classes))
+    if use_ffcv:
+        #TODO: debug
+        model.fc = nn.Linear(no_features_fc, 100)
+    else:
+        model.fc = nn.Linear(no_features_fc, len(train_loader.dataset.classes))
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Device:",device)
@@ -60,10 +74,10 @@ def train_model(backbone_name, pretrained, freeze_all, train_loader, val_loader,
     # TODO: from where to get
     # cls_nms = val_loader.dataset.classes
     phases = ["train", "val"]
-    #dataset_sizes = {x: len(dataloaders[x].dataset) for x in phases}
-    dataset_sizes = {
-        x: len(dataloaders[x].indices) for x in phases
-    }
+    if use_ffcv:
+        dataset_sizes = {x: len(dataloaders[x].indices) for x in phases}
+    else:
+        dataset_sizes = {x: len(dataloaders[x].dataset) for x in phases}
     num_epochs = n_epochs
 
     start = time.time()
@@ -103,7 +117,18 @@ def train_model(backbone_name, pretrained, freeze_all, train_loader, val_loader,
                 # track history if only in train
                 with torch.set_grad_enabled(phase == 'train'):
                     outputs = model(inputs)
+
+                    # m = nn.Softmax(dim=1)
+                    # probs = m(outputs)
+
+                    # print("outputs", outputs)
                     _, preds = torch.max(outputs, 1)
+                    # print("preds", preds)
+                    #print("probs", probs)
+                    #import pdb; pdb.set_trace()
+                    #scores, _ = torch.max(probs)
+                    #print("scores", scores)
+                    #exit(10)
                     #print("ouputs", outputs.shape)
                     #import pdb; pdb.set_trace()
                     loss = criterion(outputs, labels)
@@ -169,8 +194,8 @@ def train_model(backbone_name, pretrained, freeze_all, train_loader, val_loader,
 
 def train(args):
     resize_size = int(args.resize_size) if args.resize_size is not None else None
-    train_loader, val_loader = dataloaders.get_dataset_loaders(args.dataset_name,
-                                            resize_size, int(args.batch_size))
+    train_loader, val_loader = dataloaders.get_dataset_loaders(args.dataset_name, args.use_ffcv,
+                                            resize_size, int(args.batch_size), int(args.num_dataloader_workers))
 
     if args.track_experiment:
         import wandb
@@ -179,13 +204,13 @@ def train(args):
         wandb.init(project=args.experiment_group, name=args.experiment_name, entity=args.wandb_user)
         wandb.config = args
 
-    train_model(args.backbone, not args.no_transfer_learning, args.freeze_all, train_loader,
-                                        val_loader, int(args.n_epochs), args.track_experiment, args.track_images)
+    train_model(args.backbone, not args.no_transfer_learning, args.freeze_all, train_loader, val_loader, 
+                                    args.use_ffcv, int(args.n_epochs), args.track_experiment, args.track_images)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--backbone", default="resnet18")
+    parser.add_argument("--backbone", default="resnet50")
 
 
     parser.add_argument("--no_transfer_learning", action=argparse.BooleanOptionalAction)
@@ -193,8 +218,10 @@ if __name__ == "__main__":
 
     parser.add_argument("--dataset_name", default="CIFAR10")
     parser.add_argument("--resize_size", default=None)
+    parser.add_argument("--use_ffcv", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--num_dataloader_workers", default=4) # recomends to be 4 x #GPU
 
-    parser.add_argument("--batch_size", default=32)
+    parser.add_argument("--batch_size", default=64)
     parser.add_argument("--n_epochs", default=50)
 
     parser.add_argument('--track_experiment', action=argparse.BooleanOptionalAction)
