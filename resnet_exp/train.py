@@ -11,7 +11,7 @@ import torch.nn as nn
 import models
 import dataloaders
 
-def train_model(backbone_name, pretrained, freeze_all, train_loader, val_loader, n_epochs = 100, track_experiment = False):
+def train_model(backbone_name, pretrained, freeze_all, train_loader, val_loader, n_epochs = 100, track_experiment = False, track_images = False):
     """
     Train a model given model params and dataset loaders
     """
@@ -30,7 +30,9 @@ def train_model(backbone_name, pretrained, freeze_all, train_loader, val_loader,
 
     # TODO, why it works when the last layer is not resized!?
     no_features_fc = model.fc.in_features
-    model.fc = nn.Linear(no_features_fc, len(train_loader.dataset.classes))
+    #TODO: debug
+    model.fc = nn.Linear(no_features_fc, 100)
+    # model.fc = nn.Linear(no_features_fc, len(train_loader.dataset.classes))
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Device:",device)
@@ -54,9 +56,14 @@ def train_model(backbone_name, pretrained, freeze_all, train_loader, val_loader,
         "train": train_loader,
         "val": val_loader
     }
-    cls_nms = val_loader.dataset.classes
+
+    # TODO: from where to get
+    # cls_nms = val_loader.dataset.classes
     phases = ["train", "val"]
-    dataset_sizes = {x: len(dataloaders[x].dataset) for x in phases}
+    #dataset_sizes = {x: len(dataloaders[x].dataset) for x in phases}
+    dataset_sizes = {
+        x: len(dataloaders[x].indices) for x in phases
+    }
     num_epochs = n_epochs
 
     start = time.time()
@@ -84,8 +91,10 @@ def train_model(backbone_name, pretrained, freeze_all, train_loader, val_loader,
 
             # Iterate over data.
             for batch_idx, (inputs, labels) in enumerate(dataloaders[phase]):
-                inputs = inputs.to(device)
-                labels = labels.to(device)
+                # TODO: needs to cast to float.
+                inputs = inputs.float().to(device)
+                # TODO: a bunch of stupid convertion for label.
+                labels = labels.type(torch.LongTensor).flatten().to(device)
 
                 # zero the parameter gradients
                 optimizer.zero_grad()
@@ -96,6 +105,7 @@ def train_model(backbone_name, pretrained, freeze_all, train_loader, val_loader,
                     outputs = model(inputs)
                     _, preds = torch.max(outputs, 1)
                     #print("ouputs", outputs.shape)
+                    #import pdb; pdb.set_trace()
                     loss = criterion(outputs, labels)
                     #print("loss", loss)
 
@@ -111,7 +121,8 @@ def train_model(backbone_name, pretrained, freeze_all, train_loader, val_loader,
 
                 if phase == "val":
                     wrong_epoch_images.extend([x for x in inputs[preds!=labels]])
-                    wrong_epoch_attr.extend([(cls_nms[labels[i]], cls_nms[preds[i]])\
+                    if track_images:
+                        wrong_epoch_attr.extend([(labels[i], preds[i])\
                                                     for i in (preds!=labels).nonzero().flatten()])
 
             # TODO: not using scheduler yet
@@ -138,7 +149,8 @@ def train_model(backbone_name, pretrained, freeze_all, train_loader, val_loader,
 
         if track_experiment:
             epoch_log.update({"duration_epoch": duration_epoch})
-            epoch_log.update({"wrong_in_epoch" : [wandb.Image(im, caption=f"GT:{attr[0]} Pred:{attr[1]}")\
+            if track_images:
+                epoch_log.update({"wrong_in_epoch" : [wandb.Image(im, caption=f"GT:{attr[0]} Pred:{attr[1]}")\
                                         for im, attr in zip(wrong_epoch_images, wrong_epoch_attr)]})
             wandb.log(epoch_log)
 
@@ -164,11 +176,11 @@ def train(args):
         import wandb
         if args.experiment_group == "" or args.experiment_name == "":
             raise Exception("Should define both the experiment group and name.")
-        wandb.init(project=args.experiment_group, name=args.experiment_name, entity=args.wandb_user, )
+        wandb.init(project=args.experiment_group, name=args.experiment_name, entity=args.wandb_user)
         wandb.config = args
 
     train_model(args.backbone, not args.no_transfer_learning, args.freeze_all, train_loader,
-                                        val_loader, int(args.n_epochs), args.track_experiment)
+                                        val_loader, int(args.n_epochs), args.track_experiment, args.track_images)
 
 
 if __name__ == "__main__":
@@ -188,6 +200,7 @@ if __name__ == "__main__":
     parser.add_argument('--track_experiment', action=argparse.BooleanOptionalAction)
     parser.add_argument("--experiment_group", default="resnet_experiments")
     parser.add_argument("--experiment_name", default="")
+    parser.add_argument("--track_images", action=argparse.BooleanOptionalAction)
     parser.add_argument("--wandb_user", default="gfuhr2")
 
     args = parser.parse_args()

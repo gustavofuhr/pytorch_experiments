@@ -23,7 +23,7 @@ def export_dataset_to_ffcv(dataset_name, root_folder, jpeg_quality=90, max_resol
 
         print(f"Writing dataset {write_path}...")
         writer.from_indexed_dataset(split_dataset)
-    
+
     print("done.")
 
 
