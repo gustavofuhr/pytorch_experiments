@@ -7,6 +7,7 @@ from collections import deque
 import numpy as np
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 
 import models
 import dataloaders
@@ -104,7 +105,7 @@ def train_model(backbone_name,
             wrong_epoch_attr = deque(maxlen=32)
 
             # Iterate over data.
-            for batch_idx, (inputs, labels) in enumerate(dataloaders[phase]):
+            for batch_idx, (inputs, labels) in enumerate(tqdm(dataloaders[phase])):
                 # TODO: needs to cast to float.
                 inputs = inputs.float().to(device)
                 # TODO: a bunch of stupid convertion for label.
