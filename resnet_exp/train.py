@@ -14,6 +14,7 @@ import dataloaders
 import augmentations
 import optimizers
 import schedulers
+import metrics
 
 def train_model(model,
                 train_loader,
@@ -22,6 +23,7 @@ def train_model(model,
                 scheduler,
                 use_ffcv,
                 n_epochs = 100,
+                eer_metric = False,
                 track_experiment = False,
                 track_images = False):
     """
@@ -82,6 +84,7 @@ def train_model(model,
                 model.eval()   # Set model to evaluate mode
 
             running_losses = []
+            running_eers = []
             running_corrects = 0.0
             count_corrects = 0
 
@@ -117,7 +120,8 @@ def train_model(model,
                     #print("ouputs", outputs.shape)
                     #import pdb; pdb.set_trace()
                     loss = criterion(outputs, labels)
-                    #print("loss", loss)
+                    if eer_metric:
+                        running_eers.append(metrics.eer_metric(labels, output, None))
 
                     # backward + optimize only if in training phase
                     if phase == 'train':
@@ -135,7 +139,6 @@ def train_model(model,
                         wrong_epoch_attr.extend([(labels[i], preds[i])\
                                                     for i in (preds!=labels).nonzero().flatten()])
 
-            # TODO: not using scheduler yet
             if phase == 'train':
                 scheduler.step()
 
