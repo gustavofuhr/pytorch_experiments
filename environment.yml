@@ -305,6 +305,7 @@ dependencies:
     - smmap==5.0.0
     - terminaltables==3.1.10
     - threadpoolctl==3.1.0
+    - timm==0.5.4
     - tqdm==4.64.0
     - wandb==0.12.15
     - webdataset==0.2.5

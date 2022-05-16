@@ -32,45 +32,37 @@ def _get_pytorch_dataloders(train_dataset, val_dataset, batch_size, num_workers)
     return train_loader, val_loader
 
 
-def _get_pytorch_default_transform(resize_size):
-
-    def_transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Lambda(lambda x: x.repeat(3, 1, 1) if x.size(0)==1 else x)
-    ])
-
-    if resize_size is not None:
-        def_transform = transforms.Compose([
-            transforms.Resize((resize_size,resize_size)),
-            def_transform
-        ])
-
-    return def_transform
-
-
-def get_pytorch_dataset_loaders(dataset_name, resize_size, batch_size, num_workers):
+def _get_pytorch_dataset(dataset_name, train_transform, val_transform):
     dataset = getattr(torchvision.datasets, dataset_name)
     dataset_sig = inspect.signature(dataset)
 
-    all_transform = _get_pytorch_default_transform(resize_size)
+    # all_transform = _get_pytorch_default_transform(resize_size)
 
     if "train" in dataset_sig.parameters:
         train_dataset = dataset(root="../data/", train=True,
-                                            transform=all_transform, download=True)
+                                            transform=train_transform, download=True)
 
         val_dataset = dataset(root='../data/', train=False,
-                                            transform=all_transform, download=True)
+                                            transform=val_transform, download=True)
     elif "split" in dataset_sig.parameters:
         train_dataset = dataset(root="../data/", split="train",
-                                            transform=all_transform, download=True)
+                                            transform=train_transform, download=True)
 
         val_dataset = dataset(root='../data/', split="test",
-                                            transform=all_transform, download=True)
+                                            transform=val_transform, download=True)
     else:
         raise Exception("Don't understand dataset method signature.")
 
 
-    return _get_pytorch_dataloders(train_dataset, val_dataset, batch_size, num_workers)
+    return train_dataset, val_dataset
+
+def _get_image_folder_dataset(dataset_name, train_transform, val_transform):
+    train_dataset = torchvision.datasets.ImageFolder(root=os.path.join(CUSTOM_DATASETS[dataset_name], "train"),
+                                                                            transform=train_transform)
+    val_dataset = torchvision.datasets.ImageFolder(root=os.path.join(CUSTOM_DATASETS[dataset_name], "val"),
+                                                                            transform=val_transform)
+
+    return train_dataset, val_dataset
 
 def get_ffcv_dataloaders(root_dir, dataset_name, resize_size, batch_size, num_workers):
     # Random resized crop
@@ -99,25 +91,40 @@ def get_ffcv_dataloaders(root_dir, dataset_name, resize_size, batch_size, num_wo
 
     return train_loader, val_loader
 
-def get_dataset_loaders(dataset_name, use_ffcv = False, resize_size = None, batch_size = 32, num_workers = 4):
+def get_dataset_loaders(dataset_name,
+                            train_transform,
+                            val_transform,
+                            use_ffcv = False,
+                            resize_size = None,
+                            batch_size = 32,
+                            num_workers = 4):
 
     if dataset_name in dir(torchvision.datasets):
-        return get_pytorch_dataset_loaders(dataset_name, resize_size, batch_size, num_workers)
+        train_dataset, val_dataset = _get_pytorch_dataset(dataset_name, train_transform, val_transform)
     elif use_ffcv:
         print("Using FFCV")
         return get_ffcv_dataloaders(CUSTOM_DATASETS[dataset_name], dataset_name, resize_size, batch_size, num_workers)
     elif dataset_name in CUSTOM_DATASETS.keys():
-        #custom_train_dataset = image_folder_dataset.ImageFolderDataset(CUSTOM_DATASETS[dataset_name], split="train")
-        #custom_val_dataset = image_folder_dataset.ImageFolderDataset(CUSTOM_DATASETS[dataset_name], split="val")
+        train_dataset, val_dataset = _get_image_folder_dataset(dataset_name, train_transform, val_transform)
 
-        custom_train_dataset = torchvision.datasets.ImageFolder(root=os.path.join(CUSTOM_DATASETS[dataset_name], "train"),
-                                                                            transform=_get_pytorch_default_transform(resize_size))
-        custom_val_dataset = torchvision.datasets.ImageFolder(root=os.path.join(CUSTOM_DATASETS[dataset_name], "val"),
-                                                                            transform=_get_pytorch_default_transform(resize_size))
+    return _get_pytorch_dataloders(train_dataset, val_dataset, batch_size, num_workers)
 
-        return _get_pytorch_dataloders(custom_train_dataset, custom_val_dataset, batch_size, num_workers)
+
+def DEPRECATED_get_pytorch_default_transform(resize_size):
+
+    def_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Lambda(lambda x: x.repeat(3, 1, 1) if x.size(0)==1 else x)
+    ])
+
+    if resize_size is not None:
+        def_transform = transforms.Compose([
+            transforms.Resize((resize_size,resize_size)),
+            def_transform
+        ])
+
+    return def_transform
 
 
 if __name__ == "__main__":
     get_dataset_loaders("dogbreeds")
-

@@ -11,16 +11,19 @@ from tqdm import tqdm
 
 import models
 import dataloaders
+import augmentations
+import optimizers
+import schedulers
 
-def train_model(backbone_name, 
-                    pretrained, 
-                    freeze_all, 
-                    train_loader, 
-                    val_loader,
-                    use_ffcv, 
-                    n_epochs = 100, 
-                    track_experiment = False, 
-                    track_images = False):
+def train_model(model,
+                train_loader,
+                val_loader,
+                optimizer,
+                scheduler,
+                use_ffcv,
+                n_epochs = 100,
+                track_experiment = False,
+                track_images = False):
     """
     Train a model given model params and dataset loaders
     """
@@ -28,26 +31,10 @@ def train_model(backbone_name,
 
     torch.backends.cudnn.benchmark = True
 
-    model = models.get_model(backbone_name, pretrained)
-    print("model {backbone_name}")
-    print(model)
     # the backbone, usually will not restrict the input size of the data
     # e.g.: before the fc of Resnet we have (avgpool): AdaptiveAvgPool2d(output_size=(1, 1))
     # but the input channels are related:
     # (conv1): Conv2d(3, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-
-    if freeze_all:
-        # make every parameter freeze, fc will be redone and unfreeze
-        for param in model.parameters():
-            param.requires_grad = False
-
-    # TODO, why it works when the last layer is not resized!?
-    no_features_fc = model.fc.in_features
-    if use_ffcv:
-        #TODO: debug
-        model.fc = nn.Linear(no_features_fc, 100)
-    else:
-        model.fc = nn.Linear(no_features_fc, len(train_loader.dataset.classes))
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Device:",device)
@@ -58,9 +45,6 @@ def train_model(backbone_name,
         wandb.watch(model)
 
     criterion = nn.CrossEntropyLoss()
-    # optimizer = torch.optim.SGD(model.parameters(), lr=0.05)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
-
     since = time.time()
 
     best_model_wts = copy.deepcopy(model.state_dict())
@@ -152,10 +136,8 @@ def train_model(backbone_name,
                                                     for i in (preds!=labels).nonzero().flatten()])
 
             # TODO: not using scheduler yet
-            # if phase == 'train':
-            #    scheduler.step()
-            # Decay LR by a factor of 0.1 every 7 epochs
-            # exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
+            if phase == 'train':
+                scheduler.step()
 
             epoch_loss = np.mean(running_losses)
             epoch_acc = 100 * running_corrects.double() / dataset_sizes[phase]
@@ -166,10 +148,6 @@ def train_model(backbone_name,
                     f"{phase}_loss": epoch_loss,
                     f"{phase}_acc": epoch_acc,
                 })
-            # deep copy the model
-            # if phase == 'val' and epoch_acc > best_acc:
-            #    best_acc = epoch_acc
-            #    best_model_wts = copy.deepcopy(model.state_dict())
 
         duration_epoch = time.time() - start_epoch
 
@@ -195,8 +173,24 @@ def train_model(backbone_name,
 
 def train(args):
     resize_size = int(args.resize_size) if args.resize_size is not None else None
-    train_loader, val_loader = dataloaders.get_dataset_loaders(args.dataset_name, args.use_ffcv,
-                                            resize_size, int(args.batch_size), int(args.num_dataloader_workers))
+
+    train_transform, val_transform = augmentations.get_augmentations(resize_size, args)
+
+    train_loader, val_loader = dataloaders.get_dataset_loaders(args.dataset_name,
+                                                                    train_transform,
+                                                                    val_transform,
+                                                                    args.use_ffcv,
+                                                                    resize_size,
+                                                                    int(args.batch_size),
+                                                                    int(args.num_dataloader_workers))
+
+    model = models.get_model(args.backbone, len(train_loader.dataset.classes),
+                                        not args.no_transfer_learning, args.freeze_all_but_last)
+    print(f"model {args.backbone}")
+    print(model)
+
+    optimizer = optimizers.get_optimizer(model, args.optimizer, args.weight_decay)
+    scheduler = schedulers.get_scheduler(optimizer, args)
 
     if args.track_experiment:
         import wandb
@@ -205,8 +199,8 @@ def train(args):
         wandb.init(project=args.experiment_group, name=args.experiment_name, entity=args.wandb_user)
         wandb.config = args
 
-    train_model(args.backbone, not args.no_transfer_learning, args.freeze_all, train_loader, val_loader, 
-                                    args.use_ffcv, int(args.n_epochs), args.track_experiment, args.track_images)
+    train_model(model, train_loader, val_loader, optimizer, scheduler, args.use_ffcv,
+                    int(args.n_epochs), args.track_experiment, args.track_images)
 
 
 if __name__ == "__main__":
@@ -215,7 +209,7 @@ if __name__ == "__main__":
 
 
     parser.add_argument("--no_transfer_learning", action=argparse.BooleanOptionalAction)
-    parser.add_argument("--freeze_all", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--freeze_all_but_last", action=argparse.BooleanOptionalAction)
 
     parser.add_argument("--dataset_name", default="CIFAR10")
     parser.add_argument("--resize_size", default=None)
@@ -230,6 +224,14 @@ if __name__ == "__main__":
     parser.add_argument("--experiment_name", default="")
     parser.add_argument("--track_images", action=argparse.BooleanOptionalAction)
     parser.add_argument("--wandb_user", default="gfuhr2")
+
+    # lets define some possible augmentations
+    parser.add_argument("--randaug_string", default=None)
+    parser.add_argument("--aug_simple",  action=argparse.BooleanOptionalAction)
+
+    # options for optimizers
+    parser.add_argument("--optimizer", default="adam") # possible adam, adamp and sgd
+    parser.add_argument("--weight_decay", default=1e-4)
 
     args = parser.parse_args()
     train(args)
