@@ -121,7 +121,7 @@ def train_model(model,
                     #import pdb; pdb.set_trace()
                     loss = criterion(outputs, labels)
                     if eer_metric:
-                        running_eers.append(metrics.eer_metric(labels, output, None))
+                        running_eers.append(metrics.eer_metric(labels, outputs, None))
 
                     # backward + optimize only if in training phase
                     if phase == 'train':
@@ -203,7 +203,7 @@ def train(args):
         wandb.config = args
 
     train_model(model, train_loader, val_loader, optimizer, scheduler, args.use_ffcv,
-                    int(args.n_epochs), args.track_experiment, args.track_images)
+                    int(args.n_epochs), args.metric_eer, args.track_experiment, args.track_images)
 
 
 if __name__ == "__main__":
@@ -235,6 +235,9 @@ if __name__ == "__main__":
     # options for optimizers
     parser.add_argument("--optimizer", default="adam") # possible adam, adamp and sgd
     parser.add_argument("--weight_decay", default=1e-4)
+
+    # options for liveness
+    parser.add_argument("--metric_eer", action=argparse.BooleanOptionalAction)
 
     args = parser.parse_args()
     train(args)

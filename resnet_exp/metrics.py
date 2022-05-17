@@ -6,7 +6,7 @@ from sklearn.metrics import roc_curve
 
 softmax = nn.Softmax(dim=1)
 
-def eer_metric(labels, output, classes_map):
+def eer_metric(labels, outputs, classes_map):
     """Compute the Equal Error Rate (EER) from the predictions and scores.
     Args:
         labels (list[int]): values indicating whether the ground truth

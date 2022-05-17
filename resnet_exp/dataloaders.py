@@ -13,7 +13,8 @@ from ffcv.fields.decoders import IntDecoder, RandomResizedCropRGBImageDecoder
 CUSTOM_DATASETS = {
     "dogbreeds": "../data/dogbreeds_clean/",
     "ffcv_dogbreeds": "../data/ffcv/",
-    "unico130k_v2": "/home/gfuhr/data/unico130k_v2/ensemble/"
+    "unico130k_v2": "/home/gfuhr/data/unico130k_v2/ensemble/",
+    "liveness_simple": "/mnt/data/third_p_liveness_2/"
 }
 
 def _get_pytorch_dataloders(train_dataset, val_dataset, batch_size, num_workers):
