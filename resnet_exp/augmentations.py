@@ -13,7 +13,7 @@ def rand_augmentation(resize_size, rand_string_name):
 def _no_augumentation(resize_size):
     return transforms.Compose([
                 transforms.Resize(resize_size),
-                transforms.CenterCrop(img_size),
+                transforms.CenterCrop(resize_size), #why resize and center_crop are needed
                 transforms.ToTensor(),
                 transforms.Normalize(DEFAULT_MEAN, DEFAULT_STD)
             ])
@@ -22,8 +22,7 @@ def _no_augumentation(resize_size):
 def simple_augmentation(resize_size):
     return transforms.Compose([
                 transforms.Resize(resize_size),
-                transforms.CenterCrop(img_size),
-                transforms.RandomResizedCrop(img_size, scale=(0.5, 1.0)),
+                transforms.RandomResizedCrop(resize_size, scale=(0.5, 1.0)),
                 transforms.RandomHorizontalFlip(),
                 transforms.RandomRotation(degrees=(0, 180)),
                 transforms.ToTensor(),

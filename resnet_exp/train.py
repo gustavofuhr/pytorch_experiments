@@ -16,6 +16,8 @@ import optimizers
 import schedulers
 import metrics
 
+
+
 def train_model(model,
                 train_loader,
                 val_loader,
@@ -23,7 +25,7 @@ def train_model(model,
                 scheduler,
                 use_ffcv,
                 n_epochs = 100,
-                eer_metric = False,
+                metric_eer = False,
                 track_experiment = False,
                 track_images = False):
     """
@@ -83,16 +85,18 @@ def train_model(model,
             else:
                 model.eval()   # Set model to evaluate mode
 
-            running_losses = []
-            running_eers = []
+            running_loss = 0.0
             running_corrects = 0.0
-            count_corrects = 0
+            
+            running_labels = []
+            running_outputs = []
 
             wrong_epoch_images = deque(maxlen=32)
             wrong_epoch_attr = deque(maxlen=32)
 
             # Iterate over data.
             for batch_idx, (inputs, labels) in enumerate(tqdm(dataloaders[phase])):
+                running_labels.append(labels)
                 # TODO: needs to cast to float.
                 inputs = inputs.float().to(device)
                 # TODO: a bunch of stupid convertion for label.
@@ -106,32 +110,18 @@ def train_model(model,
                 with torch.set_grad_enabled(phase == 'train'):
                     outputs = model(inputs)
 
-                    # m = nn.Softmax(dim=1)
-                    # probs = m(outputs)
-
-                    # print("outputs", outputs)
                     _, preds = torch.max(outputs, 1)
-                    # print("preds", preds)
-                    #print("probs", probs)
-                    #import pdb; pdb.set_trace()
-                    #scores, _ = torch.max(probs)
-                    #print("scores", scores)
-                    #exit(10)
-                    #print("ouputs", outputs.shape)
-                    #import pdb; pdb.set_trace()
                     loss = criterion(outputs, labels)
-                    if eer_metric:
-                        running_eers.append(metrics.eer_metric(labels, outputs, None))
-
+                    
                     # backward + optimize only if in training phase
                     if phase == 'train':
                         loss.backward()
                         optimizer.step()
 
                 # statistics
-                running_losses.append(loss.item())
+                running_loss += loss.item()
                 running_corrects += torch.sum(preds == labels.data)
-                count_corrects += len(preds)
+                running_outputs.append(outputs.cpu())
 
                 if phase == "val":
                     wrong_epoch_images.extend([x for x in inputs[preds!=labels]])
@@ -142,15 +132,26 @@ def train_model(model,
             if phase == 'train':
                 scheduler.step()
 
-            epoch_loss = np.mean(running_losses)
+            if metric_eer:
+                probs = metrics.softmax(torch.cat(running_outputs)).cpu().detach().numpy()
+                scores = probs[:,1]
+                
+                epoch_labels = torch.cat(running_labels)
+                epoch_eer = 100 * metrics.eer_metric(epoch_labels, scores)
+
+            epoch_loss = running_loss/len(dataloaders[phase])
             epoch_acc = 100 * running_corrects.double() / dataset_sizes[phase]
             print(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.2f}%')
-
+            
             if track_experiment:
                 epoch_log.update({
                     f"{phase}_loss": epoch_loss,
                     f"{phase}_acc": epoch_acc,
                 })
+                if metric_eer:
+                    epoch_log.update({
+                        f"{phase}_eer": epoch_eer
+                    })
 
         duration_epoch = time.time() - start_epoch
 
@@ -233,7 +234,7 @@ if __name__ == "__main__":
     parser.add_argument("--aug_simple",  action=argparse.BooleanOptionalAction)
 
     # options for optimizers
-    parser.add_argument("--optimizer", default="adam") # possible adam, adamp and sgd
+    parser.add_argument("--optimizer", default="sgd") # possible adam, adamp and sgd
     parser.add_argument("--weight_decay", default=1e-4)
 
     # options for liveness
