@@ -41,6 +41,7 @@ def train_model(model,
     # (conv1): Conv2d(3, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = "cpu"
     print("Device:",device)
 
     model.to(device)
@@ -87,7 +88,7 @@ def train_model(model,
 
             running_loss = 0.0
             running_corrects = 0.0
-            
+
             running_labels = []
             running_outputs = []
 
@@ -112,7 +113,7 @@ def train_model(model,
 
                     _, preds = torch.max(outputs, 1)
                     loss = criterion(outputs, labels)
-                    
+
                     # backward + optimize only if in training phase
                     if phase == 'train':
                         loss.backward()
@@ -135,14 +136,14 @@ def train_model(model,
             if metric_eer:
                 probs = metrics.softmax(torch.cat(running_outputs)).cpu().detach().numpy()
                 scores = probs[:,1]
-                
+
                 epoch_labels = torch.cat(running_labels)
                 epoch_eer = 100 * metrics.eer_metric(epoch_labels, scores)
 
             epoch_loss = running_loss/len(dataloaders[phase])
             epoch_acc = 100 * running_corrects.double() / dataset_sizes[phase]
             print(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.2f}%')
-            
+
             if track_experiment:
                 epoch_log.update({
                     f"{phase}_loss": epoch_loss,
