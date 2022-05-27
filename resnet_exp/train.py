@@ -41,7 +41,6 @@ def train_model(model,
     # (conv1): Conv2d(3, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    device = "cpu"
     print("Device:",device)
 
     model.to(device)
@@ -60,6 +59,11 @@ def train_model(model,
         "train": train_loader,
         "val": val_loader
     }
+
+    print("Dataset classes:")
+    print("Train", dataloaders["train"].dataset.classes)
+    print("Val", dataloaders["val"].dataset.classes)
+    
 
     # TODO: from where to get
     # cls_nms = val_loader.dataset.classes
@@ -89,15 +93,16 @@ def train_model(model,
             running_loss = 0.0
             running_corrects = 0.0
 
-            running_labels = []
-            running_outputs = []
+            running_labels = torch.Tensor()
+            running_outputs = torch.Tensor()
 
             wrong_epoch_images = deque(maxlen=32)
             wrong_epoch_attr = deque(maxlen=32)
 
             # Iterate over data.
             for batch_idx, (inputs, labels) in enumerate(tqdm(dataloaders[phase])):
-                running_labels.append(labels)
+                if metric_eer:
+                    running_labels = torch.cat((running_labels, labels.detach().cpu()))
                 # TODO: needs to cast to float.
                 inputs = inputs.float().to(device)
                 # TODO: a bunch of stupid convertion for label.
@@ -122,7 +127,8 @@ def train_model(model,
                 # statistics
                 running_loss += loss.item()
                 running_corrects += torch.sum(preds == labels.data)
-                running_outputs.append(outputs.cpu())
+                if metric_eer:
+                    running_outputs = torch.cat((running_outputs, outputs.detach().cpu()))
 
                 if phase == "val":
                     wrong_epoch_images.extend([x for x in inputs[preds!=labels]])
@@ -134,11 +140,10 @@ def train_model(model,
                 scheduler.step()
 
             if metric_eer:
-                probs = metrics.softmax(torch.cat(running_outputs)).cpu().detach().numpy()
+                probs = metrics.softmax(running_outputs)
                 scores = probs[:,1]
 
-                epoch_labels = torch.cat(running_labels)
-                epoch_eer = 100 * metrics.eer_metric(epoch_labels, scores)
+                epoch_eer = 100 * metrics.eer_metric(running_labels, scores)
 
             epoch_loss = running_loss/len(dataloaders[phase])
             epoch_acc = 100 * running_corrects.double() / dataset_sizes[phase]
