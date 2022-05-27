@@ -1,5 +1,6 @@
 import os
 import inspect
+from collections import defaultdict
 
 import torch
 import torchvision
@@ -13,57 +14,44 @@ from ffcv.fields.decoders import IntDecoder, RandomResizedCropRGBImageDecoder
 CUSTOM_DATASETS = {
     "dogbreeds": "../data/dogbreeds_clean/",
     "ffcv_dogbreeds": "../data/ffcv/",
-    "unico130k_v2": "/home/gfuhr/data/unico130k_v2/ensemble/",
-    "liveness_simple": "/mnt/data/third_p_liveness_2/"
+    "unico130k_v2": "/home/gfuhr/data/unico130k_v2/eva/",
+    "super_audit": "/mnt/sdd/super_audit_splits/eva/",
+    "liveness_simple": "/mnt/data/third_p_liveness_2/",
+    "flash_ds": "/mnt/data/flash_ds/"
 }
 
-def _get_pytorch_dataloders(train_dataset, val_dataset, batch_size, num_workers):
-    train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
+def _get_pytorch_dataloders(dataset, batch_size, num_workers):
+    loader = torch.utils.data.DataLoader(dataset=dataset,
                                               batch_size=batch_size,
                                               shuffle=True,
                                               num_workers=num_workers,
                                               pin_memory=True)
 
-    val_loader = torch.utils.data.DataLoader(dataset=val_dataset,
-                                              batch_size=batch_size,
-                                              shuffle=True,
-                                              num_workers=num_workers,
-                                              pin_memory=True)
-
-    return train_loader, val_loader
+    return loader
 
 
-def _get_pytorch_dataset(dataset_name, train_transform, val_transform):
+def _get_pytorch_dataset(dataset_name, split, transform):
     dataset = getattr(torchvision.datasets, dataset_name)
     dataset_sig = inspect.signature(dataset)
 
     # all_transform = _get_pytorch_default_transform(resize_size)
 
     if "train" in dataset_sig.parameters:
-        train_dataset = dataset(root="../data/", train=True,
-                                            transform=train_transform, download=True)
-
-        val_dataset = dataset(root='../data/', train=False,
-                                            transform=val_transform, download=True)
+        dataset = dataset(root="../data/", train=(split == "train"),
+                                            transform=transform, download=True)
     elif "split" in dataset_sig.parameters:
-        train_dataset = dataset(root="../data/", split="train",
-                                            transform=train_transform, download=True)
-
-        val_dataset = dataset(root='../data/', split="test",
-                                            transform=val_transform, download=True)
+        dataset = dataset(root="../data/", split=split,
+                                            transform=transform, download=True)
     else:
         raise Exception("Don't understand dataset method signature.")
 
+    return dataset
 
-    return train_dataset, val_dataset
+def _get_image_folder_dataset(dataset_name, split, transform):
+    dataset = torchvision.datasets.ImageFolder(root=os.path.join(CUSTOM_DATASETS[dataset_name], split),
+                                                                            transform=transform)
 
-def _get_image_folder_dataset(dataset_name, train_transform, val_transform):
-    train_dataset = torchvision.datasets.ImageFolder(root=os.path.join(CUSTOM_DATASETS[dataset_name], "train"),
-                                                                            transform=train_transform)
-    val_dataset = torchvision.datasets.ImageFolder(root=os.path.join(CUSTOM_DATASETS[dataset_name], "val"),
-                                                                            transform=val_transform)
-
-    return train_dataset, val_dataset
+    return dataset
 
 def get_ffcv_dataloaders(root_dir, dataset_name, resize_size, batch_size, num_workers):
     # Random resized crop
@@ -92,40 +80,98 @@ def get_ffcv_dataloaders(root_dir, dataset_name, resize_size, batch_size, num_wo
 
     return train_loader, val_loader
 
-def get_dataset_loaders(dataset_name,
-                            train_transform,
-                            val_transform,
+
+class DatasetJoin(torch.utils.data.ConcatDataset):
+
+    def __init__(self, imagefolder_dataset_list):
+        super(DatasetJoin, self).__init__(imagefolder_dataset_list)
+        self.join_classes()
+
+    def join_classes(self):
+        join_class_to_idx = None
+        for ds in self.datasets:
+            if join_class_to_idx is None:
+                join_class_to_idx = ds.class_to_idx
+            else:
+                target_mapping = {}
+                new_classes = []
+                for k in ds.classes:
+                    if k in join_class_to_idx.keys() and join_class_to_idx[k] != ds.class_to_idx[k]: # different ids
+                        # shoud use a transform to the previously define int
+                        target_mapping[ds.class_to_idx[k]] = join_class_to_idx[k]
+                    else:
+                        new_classes.append(k)
+                sub_class_to_idx = {key: ds.class_to_idx[key] for key in new_classes}
+                join_class_to_idx.update(sub_class_to_idx)
+                ds.target_transform = lambda y: target_mapping.get(y, y)
+                print("transform in dataset: ", target_mapping)
+
+        self.join_class_to_idx = join_class_to_idx
+        s = set().union(*[ds.classes for ds in self.datasets])
+        self.classes = list(s)
+        #import pdb; pdb.set_trace()
+
+
+def get_dataset_loaders(dataset_names,
+                            transforms,
                             use_ffcv = False,
                             resize_size = None,
                             batch_size = 32,
                             num_workers = 4):
 
-    if dataset_name in dir(torchvision.datasets):
-        train_dataset, val_dataset = _get_pytorch_dataset(dataset_name, train_transform, val_transform)
-    elif use_ffcv:
-        print("Using FFCV")
-        return get_ffcv_dataloaders(CUSTOM_DATASETS[dataset_name], dataset_name, resize_size, batch_size, num_workers)
-    elif dataset_name in CUSTOM_DATASETS.keys():
-        train_dataset, val_dataset = _get_image_folder_dataset(dataset_name, train_transform, val_transform)
+    """
+    Expecting dataset_names and transforms to be dict with "train" and "val" keys
+    """
+    splits = ["train", "val"]
+    combined_datasets = {}
+    data_loaders = {}
+    for s in splits:
+        split_datasets = []
+        for ith_ds, ds_name in enumerate(dataset_names[s]):
+            if ds_name in dir(torchvision.datasets):
+                this_dataset = _get_pytorch_dataset(ds_name, s, transforms[s])
+            elif use_ffcv:
+                # TODO; fix this also, if its worth it.
+                print("Using FFCV")
+                return get_ffcv_dataloaders(CUSTOM_DATASETS[dataset_name], dataset_name, resize_size, batch_size, num_workers)
+            elif ds_name in CUSTOM_DATASETS.keys():
+                this_dataset = _get_image_folder_dataset(ds_name, s, transforms[s])
 
-    return _get_pytorch_dataloders(train_dataset, val_dataset, batch_size, num_workers)
+            split_datasets.append(this_dataset)
+
+        # TODO: https://stackoverflow.com/questions/71173583/concat-datasets-in-pytorch
+        combined_datasets[s] = DatasetJoin(split_datasets)
+        data_loaders[s] = _get_pytorch_dataloders(combined_datasets[s], batch_size, num_workers)
+
+    return data_loaders["train"], data_loaders["val"]
 
 
-def DEPRECATED_get_pytorch_default_transform(resize_size):
+# def DEPRECATED_get_pytorch_default_transform(resize_size):
 
-    def_transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Lambda(lambda x: x.repeat(3, 1, 1) if x.size(0)==1 else x)
-    ])
+#     def_transform = transforms.Compose([
+#         transforms.ToTensor(),
+#         transforms.Lambda(lambda x: x.repeat(3, 1, 1) if x.size(0)==1 else x)
+#     ])
 
-    if resize_size is not None:
-        def_transform = transforms.Compose([
-            transforms.Resize((resize_size,resize_size)),
-            def_transform
-        ])
+#     if resize_size is not None:
+#         def_transform = transforms.Compose([
+#             transforms.Resize((resize_size,resize_size)),
+#             def_transform
+#         ])
 
-    return def_transform
+#     return def_transform
 
 
 if __name__ == "__main__":
-    get_dataset_loaders("dogbreeds")
+    dataset_names = {
+        "train": ["liveness_simple", "flash_ds"],
+        "val": ["liveness_simple"]
+    }
+    from resnet_exp.augmentations import simple_augmentation
+    empty_transf = simple_augmentation(128)
+
+    transforms = {
+        "train": empty_transf,
+        "val": empty_transf
+    }
+    train_dataloader, val_dataloader = get_dataset_loaders(dataset_names, transforms)

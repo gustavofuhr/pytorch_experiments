@@ -10,7 +10,7 @@ def rand_augmentation(resize_size, rand_string_name):
                 create_transform(resize_size, is_training=False, auto_augment=rand_string_name)
 
 
-def _no_augumentation(resize_size):
+def no_augumentation(resize_size):
     return transforms.Compose([
                 transforms.Resize(resize_size),
                 transforms.CenterCrop(resize_size), #why resize and center_crop are needed
@@ -27,7 +27,7 @@ def simple_augmentation(resize_size):
                 transforms.RandomRotation(degrees=(0, 180)),
                 transforms.ToTensor(),
                 transforms.Normalize(DEFAULT_MEAN, DEFAULT_STD)
-            ]), _no_augumentation(resize_size)
+            ]), no_augumentation(resize_size)
 
 
 def get_augmentations(resize_size, args):
@@ -36,4 +36,4 @@ def get_augmentations(resize_size, args):
     elif args.aug_simple:
         return simple_augmentation(resize_size)
     else:
-        return _no_augumentation(resize_size), _no_augumentation(resize_size)
+        return no_augumentation(resize_size), no_augumentation(resize_size)

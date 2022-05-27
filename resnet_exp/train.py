@@ -60,6 +60,11 @@ def train_model(model,
         "val": val_loader
     }
 
+    print("Dataset classes:")
+    print("Train", dataloaders["train"].dataset.classes)
+    print("Val", dataloaders["val"].dataset.classes)
+    
+
     # TODO: from where to get
     # cls_nms = val_loader.dataset.classes
     phases = ["train", "val"]
@@ -87,16 +92,17 @@ def train_model(model,
 
             running_loss = 0.0
             running_corrects = 0.0
-            
-            running_labels = []
-            running_outputs = []
+
+            running_labels = torch.Tensor()
+            running_outputs = torch.Tensor()
 
             wrong_epoch_images = deque(maxlen=32)
             wrong_epoch_attr = deque(maxlen=32)
 
             # Iterate over data.
             for batch_idx, (inputs, labels) in enumerate(tqdm(dataloaders[phase])):
-                running_labels.append(labels)
+                if metric_eer:
+                    running_labels = torch.cat((running_labels, labels.detach().cpu()))
                 # TODO: needs to cast to float.
                 inputs = inputs.float().to(device)
                 # TODO: a bunch of stupid convertion for label.
@@ -112,7 +118,7 @@ def train_model(model,
 
                     _, preds = torch.max(outputs, 1)
                     loss = criterion(outputs, labels)
-                    
+
                     # backward + optimize only if in training phase
                     if phase == 'train':
                         loss.backward()
@@ -121,7 +127,8 @@ def train_model(model,
                 # statistics
                 running_loss += loss.item()
                 running_corrects += torch.sum(preds == labels.data)
-                running_outputs.append(outputs.cpu())
+                if metric_eer:
+                    running_outputs = torch.cat((running_outputs, outputs.detach().cpu()))
 
                 if phase == "val":
                     wrong_epoch_images.extend([x for x in inputs[preds!=labels]])
@@ -133,16 +140,15 @@ def train_model(model,
                 scheduler.step()
 
             if metric_eer:
-                probs = metrics.softmax(torch.cat(running_outputs)).cpu().detach().numpy()
+                probs = metrics.softmax(running_outputs)
                 scores = probs[:,1]
-                
-                epoch_labels = torch.cat(running_labels)
-                epoch_eer = 100 * metrics.eer_metric(epoch_labels, scores)
+
+                epoch_eer = 100 * metrics.eer_metric(running_labels, scores)
 
             epoch_loss = running_loss/len(dataloaders[phase])
             epoch_acc = 100 * running_corrects.double() / dataset_sizes[phase]
             print(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.2f}%')
-            
+
             if track_experiment:
                 epoch_log.update({
                     f"{phase}_loss": epoch_loss,
@@ -180,13 +186,20 @@ def train(args):
 
     train_transform, val_transform = augmentations.get_augmentations(resize_size, args)
 
-    train_loader, val_loader = dataloaders.get_dataset_loaders(args.dataset_name,
-                                                                    train_transform,
-                                                                    val_transform,
-                                                                    args.use_ffcv,
-                                                                    resize_size,
-                                                                    int(args.batch_size),
-                                                                    int(args.num_dataloader_workers))
+    transformers = {
+        "train": train_transform,
+        "val": val_transform
+    }
+    in_datasets_names = {
+        "train": args.train_datasets,
+        "val": args.val_datasets
+    }
+    train_loader, val_loader = dataloaders.get_dataset_loaders(in_datasets_names,
+                                                                transformers,
+                                                                args.use_ffcv,
+                                                                resize_size,
+                                                                int(args.batch_size),
+                                                                int(args.num_dataloader_workers))
 
     model = models.get_model(args.backbone, len(train_loader.dataset.classes),
                                         not args.no_transfer_learning, args.freeze_all_but_last)
@@ -215,7 +228,10 @@ if __name__ == "__main__":
     parser.add_argument("--no_transfer_learning", action=argparse.BooleanOptionalAction)
     parser.add_argument("--freeze_all_but_last", action=argparse.BooleanOptionalAction)
 
-    parser.add_argument("--dataset_name", default="CIFAR10")
+    # {phase} datasets are hope to have {phase}-named folders inside them
+    parser.add_argument("--train_datasets", action='store', type=str, nargs="+")
+    parser.add_argument("--val_datasets", action='store', type=str, nargs="+")
+
     parser.add_argument("--resize_size", default=None)
     parser.add_argument("--use_ffcv", action=argparse.BooleanOptionalAction)
     parser.add_argument("--num_dataloader_workers", default=4) # recomends to be 4 x #GPU
