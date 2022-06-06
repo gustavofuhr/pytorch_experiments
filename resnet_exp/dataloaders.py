@@ -20,12 +20,27 @@ CUSTOM_DATASETS = {
     "flash_ds": "/mnt/data/flash_ds/"
 }
 
-def _get_pytorch_dataloders(dataset, batch_size, num_workers):
-    loader = torch.utils.data.DataLoader(dataset=dataset,
-                                              batch_size=batch_size,
-                                              shuffle=True,
-                                              num_workers=num_workers,
-                                              pin_memory=True)
+def _get_pytorch_dataloders(dataset, batch_size, num_workers, balanced_weights = False):
+    if balanced_weights:
+        #balance_samples = 
+        targets = []
+        for _, target in dataset:
+            targets.append(target)
+        targets = torch.tensor(targets)
+
+        class_sample_count = torch.tensor([(targets == t).sum() for t in torch.unique(targets, sorted=True)])
+
+        weight = 1. / class_sample_count.float()
+        samples_weight = torch.tensor([weight[t] for t in targets])
+
+        # Create sampler, dataset, loader
+        sampler = torch.utils.data.WeightedRandomSampler(samples_weight, len(samples_weight))
+        loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, num_workers=num_workers, 
+                                                                    pin_memory=True, sampler=sampler)
+
+    else:
+        loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True,
+                                                num_workers=num_workers, pin_memory=True)
 
     return loader
 
@@ -117,7 +132,8 @@ def get_dataset_loaders(dataset_names,
                             use_ffcv = False,
                             resize_size = None,
                             batch_size = 32,
-                            num_workers = 4):
+                            num_workers = 4,
+                            balanced_weights = False):
 
     """
     Expecting dataset_names and transforms to be dict with "train" and "val" keys
@@ -141,7 +157,7 @@ def get_dataset_loaders(dataset_names,
 
         # TODO: https://stackoverflow.com/questions/71173583/concat-datasets-in-pytorch
         combined_datasets[s] = DatasetJoin(split_datasets)
-        data_loaders[s] = _get_pytorch_dataloders(combined_datasets[s], batch_size, num_workers)
+        data_loaders[s] = _get_pytorch_dataloders(combined_datasets[s], batch_size, num_workers, balanced_weights)
 
     return data_loaders["train"], data_loaders["val"]
 

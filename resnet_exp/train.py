@@ -199,7 +199,8 @@ def train(args):
                                                                 args.use_ffcv,
                                                                 resize_size,
                                                                 int(args.batch_size),
-                                                                int(args.num_dataloader_workers))
+                                                                int(args.num_dataloader_workers),
+                                                                args.balanced_weights)
 
     model = models.get_model(args.backbone, len(train_loader.dataset.classes),
                                         not args.no_transfer_learning, args.freeze_all_but_last)
@@ -231,6 +232,7 @@ if __name__ == "__main__":
     # {phase} datasets are hope to have {phase}-named folders inside them
     parser.add_argument("--train_datasets", action='store', type=str, nargs="+")
     parser.add_argument("--val_datasets", action='store', type=str, nargs="+")
+    parser.add_argument("--balanced_weights", action=argparse.BooleanOptionalAction)
 
     parser.add_argument("--resize_size", default=None)
     parser.add_argument("--use_ffcv", action=argparse.BooleanOptionalAction)
