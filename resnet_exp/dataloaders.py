@@ -1,6 +1,6 @@
 import os
 import inspect
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 import torch
 import torchvision
@@ -22,16 +22,10 @@ CUSTOM_DATASETS = {
 
 def _get_pytorch_dataloders(dataset, batch_size, num_workers, balanced_weights = False):
     if balanced_weights:
-        #balance_samples = 
-        targets = []
-        for _, target in dataset:
-            targets.append(target)
-        targets = torch.tensor(targets)
-
-        class_sample_count = torch.tensor([(targets == t).sum() for t in torch.unique(targets, sorted=True)])
+        class_sample_count = torch.tensor([*dataset.class_sample_count.values()])
 
         weight = 1. / class_sample_count.float()
-        samples_weight = torch.tensor([weight[t] for t in targets])
+        samples_weight = torch.tensor([weight[t] for t in dataset.all_targets])
 
         # Create sampler, dataset, loader
         sampler = torch.utils.data.WeightedRandomSampler(samples_weight, len(samples_weight))
@@ -104,6 +98,8 @@ class DatasetJoin(torch.utils.data.ConcatDataset):
 
     def join_classes(self):
         join_class_to_idx = None
+        class_sample_count = Counter()
+        self.all_targets = []
         for ds in self.datasets:
             if join_class_to_idx is None:
                 join_class_to_idx = ds.class_to_idx
@@ -120,11 +116,21 @@ class DatasetJoin(torch.utils.data.ConcatDataset):
                 join_class_to_idx.update(sub_class_to_idx)
                 ds.target_transform = lambda y: target_mapping.get(y, y)
                 print("transform in dataset: ", target_mapping)
+            this_ds_counts = Counter(ds.targets)
+            print("this_ds_counts", this_ds_counts)
+            # TODO: this class_sample_count is not taking into account the target_mapping
+            class_sample_count.update(this_ds_counts)
+            self.all_targets.extend(ds.targets)
+
+        # TODO: for this to work the order should be same when Im weighting samples        
+        self.all_targets = torch.tensor(self.all_targets)
+
+        self.class_sample_count = class_sample_count
+        print("final count", self.class_sample_count)
 
         self.join_class_to_idx = join_class_to_idx
         s = set().union(*[ds.classes for ds in self.datasets])
         self.classes = list(s)
-        #import pdb; pdb.set_trace()
 
 
 def get_dataset_loaders(dataset_names,
