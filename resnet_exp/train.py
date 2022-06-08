@@ -8,6 +8,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tqdm import tqdm
+import wandb
+
 
 import models
 import dataloaders
@@ -31,8 +33,6 @@ def train_model(model,
     """
     Train a model given model params and dataset loaders
     """
-    # import pdb; pdb.set_trace()
-
     torch.backends.cudnn.benchmark = True
 
     # the backbone, usually will not restrict the input size of the data
@@ -45,7 +45,6 @@ def train_model(model,
 
     model.to(device)
     if track_experiment:
-        import wandb
         wandb.watch(model)
 
     criterion = nn.CrossEntropyLoss()
@@ -53,6 +52,7 @@ def train_model(model,
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
+    best_eer = 100
 
 
     dataloaders = {
@@ -63,7 +63,6 @@ def train_model(model,
     print("Dataset classes:")
     print("Train", dataloaders["train"].dataset.classes)
     print("Val", dataloaders["val"].dataset.classes)
-    
 
     # TODO: from where to get
     # cls_nms = val_loader.dataset.classes
@@ -75,6 +74,8 @@ def train_model(model,
     num_epochs = n_epochs
 
     start = time.time()
+
+
     for epoch in range(num_epochs):
         start_epoch = time.time()
         print(f'Epoch {epoch}/{num_epochs - 1}')
@@ -149,6 +150,9 @@ def train_model(model,
             epoch_acc = 100 * running_corrects.double() / dataset_sizes[phase]
             print(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.2f}%')
 
+            if epoch_acc > best_acc:
+                best_acc = epoch_acc
+
             if track_experiment:
                 epoch_log.update({
                     f"{phase}_loss": epoch_loss,
@@ -158,6 +162,8 @@ def train_model(model,
                     epoch_log.update({
                         f"{phase}_eer": epoch_eer
                     })
+                    if epoch_eer < best_eer:
+                        best_eer = epoch_eer
 
         duration_epoch = time.time() - start_epoch
 
@@ -173,6 +179,8 @@ def train_model(model,
 
     time_elapsed = time.time() - since
     wandb.run.summary["total_duration"] = time_elapsed
+
+    wandb.run.summary["best_val_eer"] = best_eer
     wandb.run.summary["best_val_acc"] = best_acc
     print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s')
     print(f'Best val acc: {best_acc:4f}')
@@ -190,10 +198,13 @@ def train(args):
         "train": train_transform,
         "val": val_transform
     }
+
+    # I'am enabling using + between dataset names because of sweeps which does not work with nargs
     in_datasets_names = {
-        "train": args.train_datasets,
-        "val": args.val_datasets
+        "train": args.train_datasets[0].split("+") if "+" in args.train_datasets[0] else args.train_datasets,
+        "val": args.val_datasets[0].split("+") if "+" in args.train_datasets[0] else args.val_datasets,
     }
+
     train_loader, val_loader = dataloaders.get_dataset_loaders(in_datasets_names,
                                                                 transformers,
                                                                 args.use_ffcv,
@@ -205,17 +216,18 @@ def train(args):
     model = models.get_model(args.backbone, len(train_loader.dataset.classes),
                                         not args.no_transfer_learning, args.freeze_all_but_last)
     print(f"model {args.backbone}")
-    print(model)
+    # print(model)
 
     optimizer = optimizers.get_optimizer(model, args.optimizer, args.weight_decay)
     scheduler = schedulers.get_scheduler(optimizer, args)
 
-    if args.track_experiment:
-        import wandb
+    if args.wandb_sweep_activated:
+        wandb.init(project=args.experiment_group, entity=args.wandb_user, config=args)
+    elif args.track_experiment:
         if args.experiment_group == "" or args.experiment_name == "":
             raise Exception("Should define both the experiment group and name.")
-        wandb.init(project=args.experiment_group, name=args.experiment_name, entity=args.wandb_user)
-        wandb.config = args
+        else:
+            wandb.init(project=args.experiment_group, name=args.experiment_name, entity=args.wandb_user, config=args)
 
     train_model(model, train_loader, val_loader, optimizer, scheduler, args.use_ffcv,
                     int(args.n_epochs), args.metric_eer, args.track_experiment, args.track_images)
@@ -236,16 +248,17 @@ if __name__ == "__main__":
 
     parser.add_argument("--resize_size", default=None)
     parser.add_argument("--use_ffcv", action=argparse.BooleanOptionalAction)
-    parser.add_argument("--num_dataloader_workers", default=4) # recomends to be 4 x #GPU
+    parser.add_argument("--num_dataloader_workers", default=8) # recomends to be 4 x #GPU
 
     parser.add_argument("--batch_size", default=64)
-    parser.add_argument("--n_epochs", default=50)
+    parser.add_argument("--n_epochs", default=5)
 
     parser.add_argument('--track_experiment', action=argparse.BooleanOptionalAction)
     parser.add_argument("--experiment_group", default="resnet_experiments")
     parser.add_argument("--experiment_name", default="")
     parser.add_argument("--track_images", action=argparse.BooleanOptionalAction)
     parser.add_argument("--wandb_user", default="gfuhr2")
+    parser.add_argument("--wandb_sweep_activated", action=argparse.BooleanOptionalAction)
 
     # lets define some possible augmentations
     parser.add_argument("--randaug_string", default=None)
@@ -253,7 +266,7 @@ if __name__ == "__main__":
 
     # options for optimizers
     parser.add_argument("--optimizer", default="sgd") # possible adam, adamp and sgd
-    parser.add_argument("--weight_decay", default=1e-4)
+    parser.add_argument("--weight_decay", type=float, default=1e-4)
 
     # options for liveness
     parser.add_argument("--metric_eer", action=argparse.BooleanOptionalAction)
