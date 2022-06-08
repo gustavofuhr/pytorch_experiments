@@ -97,8 +97,8 @@ def train_model(model,
             running_labels = torch.Tensor()
             running_outputs = torch.Tensor()
 
-            wrong_epoch_images = deque(maxlen=32)
-            wrong_epoch_attr = deque(maxlen=32)
+            #wrong_epoch_images = deque(maxlen=32)
+            #wrong_epoch_attr = deque(maxlen=32)
 
             # Iterate over data.
             for batch_idx, (inputs, labels) in enumerate(tqdm(dataloaders[phase])):
@@ -131,11 +131,11 @@ def train_model(model,
                 if metric_eer:
                     running_outputs = torch.cat((running_outputs, outputs.detach().cpu()))
 
-                if phase == "val":
-                    wrong_epoch_images.extend([x for x in inputs[preds!=labels]])
-                    if track_images:
-                        wrong_epoch_attr.extend([(labels[i], preds[i])\
-                                                    for i in (preds!=labels).nonzero().flatten()])
+                #if phase == "train":
+                #    wrong_epoch_images.extend([x for x in inputs[preds!=labels]])
+                    #if track_images:
+                    #    wrong_epoch_attr.extend([(labels[i], preds[i])\
+                    #                                for i in (preds!=labels).nonzero().flatten()])
 
             if phase == 'train':
                 scheduler.step()
@@ -165,13 +165,14 @@ def train_model(model,
                     if epoch_eer < best_eer:
                         best_eer = epoch_eer
 
+                if track_images and phase == "train":
+                    epoch_log.update({"last_train_batch" : wandb.Image(inputs)})
+
+
         duration_epoch = time.time() - start_epoch
 
         if track_experiment:
             epoch_log.update({"duration_epoch": duration_epoch})
-            if track_images:
-                epoch_log.update({"wrong_in_epoch" : [wandb.Image(im, caption=f"GT:{attr[0]} Pred:{attr[1]}")\
-                                        for im, attr in zip(wrong_epoch_images, wrong_epoch_attr)]})
             wandb.log(epoch_log)
 
         print()
@@ -192,8 +193,7 @@ def train_model(model,
 def train(args):
     resize_size = int(args.resize_size) if args.resize_size is not None else None
 
-    train_transform, val_transform = augmentations.get_augmentations(resize_size, args)
-
+    train_transform, val_transform = augmentations.get_augmentations(resize_size, args.augmentation)
     transformers = {
         "train": train_transform,
         "val": val_transform
@@ -260,9 +260,7 @@ if __name__ == "__main__":
     parser.add_argument("--wandb_user", default="gfuhr2")
     parser.add_argument("--wandb_sweep_activated", action=argparse.BooleanOptionalAction)
 
-    # lets define some possible augmentations
-    parser.add_argument("--randaug_string", default=None)
-    parser.add_argument("--aug_simple",  action=argparse.BooleanOptionalAction)
+    parser.add_argument("--augmentation", type=str, required=True, choices=["noaug", "simple", "rand-m9-n3-mstd0.5", "rand-mstd1-w0", "random_erase"])
 
     # options for optimizers
     parser.add_argument("--optimizer", default="sgd") # possible adam, adamp and sgd

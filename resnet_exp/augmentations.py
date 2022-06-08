@@ -10,7 +10,18 @@ def rand_augmentation(resize_size, rand_string_name):
                 create_transform(resize_size, is_training=False, auto_augment=rand_string_name)
 
 
-def no_augumentation(resize_size):
+def rand_erase_augmentation(resize_size):
+
+    return transforms.Compose([
+                transforms.Resize(resize_size),
+                transforms.CenterCrop(resize_size), #why resize and center_crop are needed
+                transforms.ToTensor(),
+                transforms.Normalize(DEFAULT_MEAN, DEFAULT_STD),
+                transforms.RandomErasing()
+            ])
+
+
+def _no_augumentation(resize_size):
     return transforms.Compose([
                 transforms.Resize(resize_size),
                 transforms.CenterCrop(resize_size), #why resize and center_crop are needed
@@ -27,13 +38,15 @@ def simple_augmentation(resize_size):
                 transforms.RandomRotation(degrees=(0, 180)),
                 transforms.ToTensor(),
                 transforms.Normalize(DEFAULT_MEAN, DEFAULT_STD)
-            ]), no_augumentation(resize_size)
+            ]), _no_augumentation(resize_size)
 
 
-def get_augmentations(resize_size, args):
-    if args.randaug_string is not None:
-        return rand_augmentation(resize_size, args.randaug_string)
-    elif args.aug_simple:
+def get_augmentations(resize_size, augmentation_opt):
+    if augmentation_opt == "noaug":
+        return _no_augumentation(resize_size),_no_augumentation(resize_size)
+    elif augmentation_opt == "simple":
         return simple_augmentation(resize_size)
+    elif augmentation_opt == "random_erase":
+        return rand_erase_augmentation(resize_size), rand_erase_augmentation(resize_size)
     else:
-        return no_augumentation(resize_size), no_augumentation(resize_size)
+        return rand_augmentation(resize_size, augmentation_opt)
