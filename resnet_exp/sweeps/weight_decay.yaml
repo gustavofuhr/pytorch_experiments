@@ -1,0 +1,42 @@
+command:
+- ${env}
+- python
+- ${program}
+- ${args}
+- --wandb_sweep_activated
+- --track_experiment
+- --metric_eer
+program: train.py
+method: grid
+metric:
+  name: best_val_eer
+  goal: minimize
+parameters:
+  train_datasets:
+    values: ["liveness_simple+flash_ds"]
+  val_datasets:
+    values: ["liveness_simple"]
+  optimizer:
+    values: [sgd]
+  backbone:
+    values: [resnet18]
+  randaug_string:
+    values: [rand-m9-n3-mstd0.5]
+  experiment_group:
+    values: [sweep_dump]
+  weight_decay:
+    values: [1e-5, 1e-4, 1e-3]
+  resize_size:
+    values: [128, 256]
+# --track_experiment 
+# --track_images 
+# --experiment_group dump 
+# --experiment_name sweep 
+# --train_datasets liveness_simple flash_ds 
+# --val liveness_simple 
+# --resize_size 128 
+# --backbone resnet34 
+# --num_dataloader_workers 8 
+# --n_epochs 1 
+# --randaug_string rand-m9-n3-mstd0.5 
+# --optimizer sgd
