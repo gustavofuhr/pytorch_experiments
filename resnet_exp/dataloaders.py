@@ -15,7 +15,7 @@ CUSTOM_DATASETS = {
     "dogbreeds": "../data/dogbreeds_clean/",
     "ffcv_dogbreeds": "../data/ffcv/",
     "unico130k_v2": "/home/gfuhr/data/unico130k_v2/eva/",
-    "super_audit": "/mnt/sdd/super_audit_splits/eva/",
+    "super_audit": "/home/gfuhr/data/super_audit_splits/eva/",
     "liveness_simple": "/mnt/data/third_p_liveness_2/",
     "flash_ds": "/mnt/data/flash_ds/"
 }

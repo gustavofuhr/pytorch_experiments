@@ -25,3 +25,5 @@ parameters:
     values: ["noaug", "simple", "rand-m9-n3-mstd0.5", "rand-mstd1-w0", "random_erase"]
   resize_size:
     values: [128, 224, 300, 400]
+  n_epochs:
+    values: [30]
