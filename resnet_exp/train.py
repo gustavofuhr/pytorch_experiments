@@ -202,7 +202,7 @@ def train(args):
     # I'am enabling using + between dataset names because of sweeps which does not work with nargs
     in_datasets_names = {
         "train": args.train_datasets[0].split("+") if "+" in args.train_datasets[0] else args.train_datasets,
-        "val": args.val_datasets[0].split("+") if "+" in args.train_datasets[0] else args.val_datasets,
+        "val": args.val_datasets[0].split("+") if "+" in args.val_datasets[0] else args.val_datasets,
     }
 
     train_loader, val_loader = dataloaders.get_dataset_loaders(in_datasets_names,
