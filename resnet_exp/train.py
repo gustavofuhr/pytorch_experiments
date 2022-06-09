@@ -150,8 +150,8 @@ def train_model(model,
             epoch_acc = 100 * running_corrects.double() / dataset_sizes[phase]
             print(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.2f}%')
 
-            if epoch_acc > best_acc:
-                best_acc = epoch_acc
+            if phase == "val" and epoch_acc > best_acc:
+                wandb.run.summary["best_val_acc"] = epoch_acc
 
             if track_experiment:
                 epoch_log.update({
@@ -162,8 +162,8 @@ def train_model(model,
                     epoch_log.update({
                         f"{phase}_eer": epoch_eer
                     })
-                    if epoch_eer < best_eer:
-                        best_eer = epoch_eer
+                    if phase == "val" and epoch_eer < best_eer:
+                        wandb.run.summary["best_val_eer"] = epoch_eer
 
                 if track_images and phase == "train":
                     epoch_log.update({"last_train_batch" : wandb.Image(inputs)})
@@ -181,8 +181,6 @@ def train_model(model,
     time_elapsed = time.time() - since
     wandb.run.summary["total_duration"] = time_elapsed
 
-    wandb.run.summary["best_val_eer"] = best_eer
-    wandb.run.summary["best_val_acc"] = best_acc
     print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s')
     print(f'Best val acc: {best_acc:4f}')
 
