@@ -1,0 +1,29 @@
+command:
+- ${env}
+- python
+- ${program}
+- ${args}
+- --wandb_sweep_activated
+- --track_experiment
+- --metric_eer
+name: resize_and_augmentation
+program: train.py
+method: grid
+metric:
+  name: best_val_eer
+  goal: minimize
+parameters:
+  train_datasets:
+    values: ["unico130k_v2"]
+  val_datasets:
+    values: ["unico130k_v2+super_audit"]
+  optimizer:
+    values: [sgd]
+  backbone:
+    values: ["mobilenetv3_large_100", ]
+  augmentation:
+    values: ["simple"]
+  resize_size:
+    values: [300]
+  n_epochs:
+    values: [30]
