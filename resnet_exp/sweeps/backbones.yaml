@@ -20,10 +20,10 @@ parameters:
   optimizer:
     values: [sgd]
   backbone:
-    values: ["mobilenetv3_large_100", ]
+    values: ["deit_base_patch16_224", "convnext_base_in22k", "mixer_b16_224_in21k", "mobilenetv3_large_100", "efficientnet_b0", "resnet50", "lambda_resnet50ts", "convnext_small", "densenet_121"]
   augmentation:
     values: ["simple"]
   resize_size:
-    values: [300]
+    values: [224]
   n_epochs:
-    values: [30]
+    values: [20]
