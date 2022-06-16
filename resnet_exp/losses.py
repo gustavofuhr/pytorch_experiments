@@ -23,7 +23,6 @@ def get_loss(loss_name):
             ce_label_smoothing = float(loss_name[loss_name.find(ss)+len(ss):])
         else:
             ce_label_smoothing = 0.0
-        import pdb; pdb.set_trace()
         loss = nn.CrossEntropyLoss(label_smoothing = ce_label_smoothing)
     elif loss_name == "angular":
         loss = losses.AngularLoss(alpha=40)
