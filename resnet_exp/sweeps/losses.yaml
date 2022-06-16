@@ -22,7 +22,7 @@ parameters:
   backbone:
     values: ["mobilenetv3_large_100"]
   augmentation:
-    values: ["simple"]
+    values: ["rand-m9-n3-mstd0.5"]
   resize_size:
     values: [224]
   n_epochs:
