@@ -309,3 +309,4 @@ dependencies:
     - tqdm==4.64.0
     - wandb==0.12.15
     - webdataset==0.2.5
+    - pytorch-metric-learning==1.4.0

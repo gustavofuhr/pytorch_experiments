@@ -17,7 +17,7 @@ import augmentations
 import optimizers
 import schedulers
 import metrics
-
+import losses
 
 
 def train_model(model,
@@ -25,6 +25,7 @@ def train_model(model,
                 val_loader,
                 optimizer,
                 scheduler,
+                loss_function,
                 use_ffcv,
                 n_epochs = 100,
                 metric_eer = False,
@@ -47,7 +48,6 @@ def train_model(model,
     if track_experiment:
         wandb.watch(model)
 
-    criterion = nn.CrossEntropyLoss()
     since = time.time()
 
     best_model_wts = copy.deepcopy(model.state_dict())
@@ -118,7 +118,7 @@ def train_model(model,
                     outputs = model(inputs)
 
                     _, preds = torch.max(outputs, 1)
-                    loss = criterion(outputs, labels)
+                    loss = loss_function(outputs, labels)
 
                     # backward + optimize only if in training phase
                     if phase == 'train':
@@ -218,6 +218,7 @@ def train(args):
 
     optimizer = optimizers.get_optimizer(model, args.optimizer, args.weight_decay)
     scheduler = schedulers.get_scheduler(optimizer, args)
+    loss_function = losses.get_loss(args.loss)
 
     if args.wandb_sweep_activated:
         wandb.init(project=args.experiment_group, entity=args.wandb_user, config=args)
@@ -227,7 +228,7 @@ def train(args):
         else:
             wandb.init(project=args.experiment_group, name=args.experiment_name, entity=args.wandb_user, config=args)
 
-    train_model(model, train_loader, val_loader, optimizer, scheduler, args.use_ffcv,
+    train_model(model, train_loader, val_loader, optimizer, scheduler, loss_function, args.use_ffcv,
                     int(args.n_epochs), args.metric_eer, args.track_experiment, args.track_images)
 
 
@@ -266,6 +267,11 @@ if __name__ == "__main__":
 
     # options for liveness
     parser.add_argument("--metric_eer", action=argparse.BooleanOptionalAction)
+
+    # options for losses
+    parser.add_argument("--loss",  type=str, default="cross_entropy")
+    # some choices are "cross_entropy", "angular", "custom_anomaly", "cross_entropy_label_smoothing_0.1", etc.
+    parser.add_argument("--ce_loss_label_smoothing",  type=float, required=False, default=0.0)
 
     args = parser.parse_args()
     train(args)
